@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+BASE_URL="${BASE_URL:-http://localhost:3000}"
+echo "[pre-push] Running RAG regression against ${BASE_URL}"
+if command -v curl >/dev/null 2>&1; then
+  if ! curl -sSf "${BASE_URL}" >/dev/null 2>&1; then
+    echo "[pre-push] Server not reachable at ${BASE_URL}; skipping local regression. Enforced in CI."
+    exit 0
+  fi
+fi
+node scripts/ragRegression.js
+echo "[pre-push] RAG regression passed."

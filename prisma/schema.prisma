@@ -1,0 +1,779 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  phone         String?
+  email         String   @unique
+  address       String?
+  specialty     String?
+  role          String   @default("ABOGADO")
+  passwordHash  String
+  active        Boolean  @default(true)
+  ciudad        String?
+  porcentaje    Float?
+  cedula        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  consultations Consultation[]
+  cases         LegalCase[]    @relation("CasosCreados")
+  casosAsignados LegalCase[]   @relation("CasosAsignados")
+  clients       Client[]
+  chatLogs      ChatLog[]
+  deadlines     CaseDeadline[]
+  legalCasesHonorarioAcordado LegalCase[] @relation("LegalCaseHonorarioAcordadoPor")
+  casePaymentsRegistered      CasePayment[] @relation("CasePaymentRegistradoPorAdmin")
+  casePaymentsVoided          CasePayment[] @relation("CasePaymentAnuladoPorAdmin")
+  lawyerPaymentsReceived      LawyerPayment[] @relation("LawyerPaymentBeneficiary")
+  lawyerPaymentsRecorded      LawyerPayment[] @relation("LawyerPaymentRecordedByAdmin")
+  lawyerPaymentsVoided        LawyerPayment[] @relation("LawyerPaymentVoidedByAdmin")
+  legalRegimeDecisionsActed     CaseLegalRegimeDecision[] @relation("LegalDecisionActor")
+  legalRegimeDecisionsOverridden CaseLegalRegimeDecision[] @relation("LegalDecisionOverrideActor")
+}
+
+model State {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  active   Boolean @default(true)
+  documents Document[]
+  consultations Consultation[]
+}
+
+model Document {
+  id           String        @id @default(cuid())
+  title        String
+  matter       String
+  jurisdiccion String
+  sourceType   String?
+  state        State?        @relation(fields: [stateId], references: [id])
+  stateId      String?
+  submatter    String?
+  content      String?
+  embedding    Unsupported("vector(1536)")?
+  active       Boolean       @default(true)
+  storagePath  String?
+  ownerUserId  String?
+  demandTags   String?
+  legalSection String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  knowledge    CaseKnowledge[]
+  legalProvisionId String?
+  legalProvision   LegalProvision? @relation(fields: [legalProvisionId], references: [id], onDelete: SetNull)
+  @@unique([stateId, title])
+  @@index([matter, submatter, jurisdiccion, sourceType])
+  @@index([ownerUserId])
+  @@index([legalProvisionId])
+}
+
+model Consultation {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  state     State?   @relation(fields: [stateId], references: [id])
+  stateId   String?
+  matter    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  attachments Attachment[]
+}
+
+model Attachment {
+  id             String       @id @default(cuid())
+  consultation   Consultation @relation(fields: [consultationId], references: [id])
+  consultationId String
+  originalName   String
+  mimeType       String
+  storagePath    String
+  createdAt      DateTime     @default(now())
+}
+
+model MatterConfig {
+  id     String  @id @default(cuid())
+  key    String  @unique
+  label  String
+  active Boolean @default(true)
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  ciudad      String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  cases       LegalCase[]
+  portalUser  ClientPortalUser?
+}
+
+model LegalCase {
+  id        String   @id @default(cuid())
+  user      User     @relation("CasosCreados", fields: [userId], references: [id])
+  userId    String
+  client    Client?  @relation(fields: [clientId], references: [id])
+  clientId  String?
+  abogado   User?    @relation("CasosAsignados", fields: [abogadoId], references: [id])
+  abogadoId String?
+  type      String   // CREAR | CONTESTAR
+  matter    String   // CIVIL | PENAL | MERCANTIL | LABORAL
+  intent    String?
+  claimKey  String?
+  expediente String
+  counterparty String
+  context   String?
+  fee       Float?
+  party     String   @default("DEMANDANTE") // DEMANDANTE | DEMANDADO
+  priority  String   @default("NORMAL")
+  status    String   @default("BORRADOR")
+  estadoAsignacion String  @default("PENDIENTE")
+  estatusCliente   String  @default("PENDIENTE")
+  precioCliente    Float?
+  honorarioAbogado Float?
+  honorarioAbogadoAcordadoAt    DateTime?
+  honorarioAbogadoAcordadoPorId String?
+  honorarioAbogadoAcordadoPor   User? @relation("LegalCaseHonorarioAcordadoPor", fields: [honorarioAbogadoAcordadoPorId], references: [id], onDelete: Restrict)
+  stripePaymentIntentId String? @unique
+  anticipoPagado         Boolean @default(false)
+  ciudad           String?
+  facts               String?
+  courtNumber         String?
+  courtType           String?
+  counterpartyAddress String?
+  expedienteReal      String?
+  folioProvisional    String?
+  questionnaireData   String?
+  questionnaireType   String?
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  attachments CaseAttachment[]
+  events     CaseEvent[]
+  knowledge  CaseKnowledge[]
+  deadlines  CaseDeadline[]
+  payments   CasePayment[]
+  lawyerPayments LawyerPayment[] @relation("LegalCaseLawyerPayments")
+  legalContext CaseLegalContext?
+  legalRegimeDecisions CaseLegalRegimeDecision[]
+  legalRagCitations LegalRagCitation[]
+  @@unique([userId, expediente])
+  @@index([abogadoId])
+  @@index([isActive, updatedAt])
+}
+
+model CaseKnowledge {
+  id          String    @id @default(cuid())
+  case        LegalCase @relation(fields: [caseId], references: [id])
+  caseId      String
+  document    Document  @relation(fields: [documentId], references: [id])
+  documentId  String
+  legalProvisionId String?
+  legalProvision LegalProvision? @relation(fields: [legalProvisionId], references: [id], onDelete: SetNull)
+  sourceType  String?
+  snippet     String?
+  score       Float?
+  createdAt   DateTime  @default(now())
+
+  @@index([caseId])
+  @@index([documentId])
+  @@index([legalProvisionId])
+}
+model CaseAttachment {
+  id        String    @id @default(cuid())
+  case      LegalCase @relation(fields: [caseId], references: [id])
+  caseId    String
+  originalName String
+  mimeType     String
+  storagePath  String
+  concept      String?
+  createdAt    DateTime @default(now())
+  @@unique([caseId, concept])
+}
+
+model CaseEvent {
+  id        String    @id @default(cuid())
+  case      LegalCase @relation(fields: [caseId], references: [id])
+  caseId    String
+  type      String    // STATUS | PRIORITY | NOTE | ATTACHMENT
+  from      String?
+  to        String?
+  message   String?
+  createdAt DateTime  @default(now())
+}
+
+model ChatLog {
+  id            String   @id @default(cuid())
+  user          User     @relation(fields: [userId], references: [id])
+  userId        String
+  matter        String
+  jurisdiccion  String
+  question      String
+  answer        String?
+  summary       String?
+  pinned        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  legalRagCitations LegalRagCitation[]
+}
+
+model StripePaymentDraft {
+  id             String   @id @default(cuid())
+  portalUserId   String
+  tipoServicio   String
+  datosPersonales String
+  respuestas     String
+  cotizacion     Float
+  createdAt      DateTime @default(now())
+
+  @@index([portalUserId])
+}
+
+model ServicioConfig {
+  id          String   @id @default(cuid())
+  servicioId  String   @unique
+  nombre      String
+  precioBase  Int
+  precioDesde Boolean  @default(false)
+  activo      Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+}
+
+model PrecioModificador {
+  id    String @id @default(cuid())
+  key   String @unique
+  valor Int
+}
+
+enum DeadlineStatus {
+  PENDIENTE
+  CUMPLIDO
+  CANCELADO
+}
+
+enum ClientPaymentType {
+  ANTICIPO_CLIENTE
+  PAGO_CLIENTE
+  REEMBOLSO_CLIENTE
+}
+
+enum FinancialMovementStatus {
+  CONFIRMADO
+  ANULADO
+}
+
+enum LawyerPaymentMethod {
+  TRANSFERENCIA
+  EFECTIVO
+  OTRO
+}
+
+/// Alcance jurídico habilitado para Abogados IA Pro en esta etapa.
+enum LegalMatter {
+  CIVIL
+  FAMILIAR
+  LABORAL
+}
+
+/// Ciclo de gobierno de una versión normativa. Los textos se conservan; no se eliminan al retirarlos.
+enum LegalNormVersionStatus {
+  DRAFT
+  UNDER_REVIEW
+  PUBLISHED
+  CURRENT
+  FUTURE
+  REPEALED
+  HISTORICAL
+}
+
+enum LegalSourceTrustLevel {
+  PRIMARY_OFFICIAL
+  OFFICIAL_CONSOLIDATED
+  OFFICIAL_OPERATIONAL
+  CURATED_INTERNAL
+}
+
+enum LegalSourceStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+/// Resultado de extraer texto de un archivo oficial conservado. Un PDF sin
+/// capa de texto nunca se interpreta como contenido jurídico: se conserva y
+/// queda pendiente de OCR o revisión humana.
+enum LegalSourceExtractionStatus {
+  NOT_REQUESTED
+  PENDING
+  EXTRACTED
+  REQUIRES_OCR
+  FAILED
+}
+
+enum LegalScope {
+  STATE
+  FEDERAL
+  NATIONAL
+}
+
+enum LegalTerritory {
+  GUANAJUATO
+  FEDERAL_NACIONAL
+}
+
+enum LegalProvisionType {
+  BOOK
+  TITLE
+  CHAPTER
+  SECTION
+  ARTICLE
+  FRACTION
+  TRANSITORY
+}
+
+enum LegalEmbeddingIndexStatus {
+  PENDING
+  INDEXED
+  FAILED
+  RETIRED
+}
+
+enum LegalApplicabilityResult {
+  RESOLVED
+  REQUIRES_REVIEW
+  BLOCKED
+}
+
+enum LegalRegime {
+  CPC_GTO_LEGACY
+  CNPCF
+  LABORAL_FEDERAL
+}
+
+model CaseDeadline {
+  id         String         @id @default(cuid())
+  case       LegalCase      @relation(fields: [caseId], references: [id])
+  caseId     String
+  user       User           @relation(fields: [userId], references: [id])
+  userId     String
+  title      String
+  startDate  DateTime
+  termDays   Int
+  dueDate    DateTime
+  status     DeadlineStatus @default(PENDIENTE)
+  notes      String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([caseId, dueDate])
+  @@index([userId, dueDate])
+  @@index([status])
+}
+
+model ClientPortalUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  phone        String?
+  client       Client?  @relation(fields: [clientId], references: [id])
+  clientId     String?  @unique
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model CasePayment {
+  id                  String                  @id @default(cuid())
+  case                LegalCase               @relation(fields: [caseId], references: [id])
+  caseId              String
+  amount              Float
+  concept             String
+  tipo                ClientPaymentType       @default(PAGO_CLIENTE)
+  estado              FinancialMovementStatus @default(CONFIRMADO)
+  date                DateTime
+  notes               String?
+  referenciaExterna   String?
+  idempotencyKey      String?                 @unique
+  registradoPorAdminId String?
+  registradoPorAdmin  User?                   @relation("CasePaymentRegistradoPorAdmin", fields: [registradoPorAdminId], references: [id], onDelete: Restrict)
+  anuladoAt           DateTime?
+  anuladoPorAdminId   String?
+  anuladoPorAdmin     User?                   @relation("CasePaymentAnuladoPorAdmin", fields: [anuladoPorAdminId], references: [id], onDelete: Restrict)
+  motivoAnulacion     String?
+  createdAt           DateTime                @default(now())
+
+  @@index([caseId])
+  @@index([caseId, estado, tipo])
+  @@index([referenciaExterna])
+}
+
+model LawyerPayment {
+  id                  String                  @id @default(cuid())
+  case                LegalCase               @relation("LegalCaseLawyerPayments", fields: [caseId], references: [id], onDelete: Restrict)
+  caseId              String
+  lawyer              User                    @relation("LawyerPaymentBeneficiary", fields: [lawyerId], references: [id], onDelete: Restrict)
+  lawyerId            String
+  amount              Float
+  paidAt              DateTime
+  method              LawyerPaymentMethod
+  reference           String?
+  notes               String?
+  status              FinancialMovementStatus @default(CONFIRMADO)
+  idempotencyKey      String                  @unique
+  recordedByAdmin     User                    @relation("LawyerPaymentRecordedByAdmin", fields: [recordedByAdminId], references: [id], onDelete: Restrict)
+  recordedByAdminId   String
+  voidedAt            DateTime?
+  voidedByAdmin       User?                   @relation("LawyerPaymentVoidedByAdmin", fields: [voidedByAdminId], references: [id], onDelete: Restrict)
+  voidedByAdminId     String?
+  voidReason          String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([caseId, status])
+  @@index([lawyerId, paidAt])
+}
+
+/// Fuente verificable de una norma. Una fuente puede tener revisiones, por lo que
+/// fingerprint permite importar de forma idempotente sin sustituir su historial.
+model LegalSource {
+  id           String                  @id @default(cuid())
+  fingerprint  String                  @unique
+  authority    String
+  url          String
+  trustLevel   LegalSourceTrustLevel
+  capturedAt   DateTime
+  contentHash  String?
+  originFile   String?
+  /// Norma a la que se destinó un archivo cargado. Las fuentes heredadas
+  /// pueden permanecer sin destino, pero un PDF nuevo no puede usarse para
+  /// crear una versión de otra norma.
+  targetNormId String?
+  originalFileName     String?
+  originalMimeType     String?
+  originalStorageProvider String?
+  originalStoragePath  String?
+  originalFileData     Bytes?
+  originalSizeBytes    Int?
+  originalSha256       String?
+  extractionStatus     LegalSourceExtractionStatus @default(NOT_REQUESTED)
+  extractedText        String? @db.Text
+  extractedTextHash    String?
+  structuredMarkdown   String? @db.Text
+  structuredHash       String?
+  extractionEngine     String?
+  extractionMetadata   Json?
+  extractionError      String?
+  extractedAt          DateTime?
+  status       LegalSourceStatus       @default(DRAFT)
+  notes        String?
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  targetNorm   LegalNorm?              @relation("LegalSourceTargetNorm", fields: [targetNormId], references: [id], onDelete: SetNull)
+  normVersions LegalNormVersion[]
+  applicabilityRules LegalApplicabilityRule[] @relation("ApplicabilityRuleSource")
+  transitionRules LegalTransitionRule[] @relation("TransitionRuleSource")
+  ragCitations LegalRagCitation[]
+
+  @@index([url])
+  @@index([status, trustLevel])
+  @@index([targetNormId])
+  @@index([originalSha256])
+  @@index([extractionStatus, updatedAt])
+}
+
+/// Catálogo canónico de normas. `matter` es la materia principal y la tabla de
+/// enlace conserva las materias habilitadas cuando una norma transversal aplica a más de una.
+model LegalNorm {
+  id                     String                   @id @default(cuid())
+  canonicalId            String                   @unique
+  officialName           String
+  matter                 LegalMatter
+  scope                  LegalScope
+  issuingAuthority       String
+  active                 Boolean                  @default(true)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  matters                LegalNormMatter[]
+  versions               LegalNormVersion[]
+  legalSources           LegalSource[]             @relation("LegalSourceTargetNorm")
+  applicabilityTargetRules LegalApplicabilityRule[] @relation("ApplicabilityTargetNorm")
+  transitionFromRules    LegalTransitionRule[]    @relation("TransitionFromNorm")
+  transitionToRules      LegalTransitionRule[]    @relation("TransitionToNorm")
+  ragCitations           LegalRagCitation[]
+
+  @@index([matter, active])
+}
+
+/// Materias explícitamente permitidas por norma. Evita suponer que una norma
+/// transversal se puede usar en una materia que no haya sido autorizada.
+model LegalNormMatter {
+  normId    String
+  matter    LegalMatter
+  norm      LegalNorm @relation(fields: [normId], references: [id], onDelete: Cascade)
+
+  @@id([normId, matter])
+  @@index([matter])
+}
+
+/// Una versión es inmutable una vez publicada. Las correcciones se agregan como
+/// una versión nueva y se enlazan por previousVersionId.
+model LegalNormVersion {
+  id                         String                    @id @default(cuid())
+  normId                     String
+  versionKey                 String
+  publicationDate            DateTime?
+  effectiveFrom              DateTime?
+  effectiveTo                DateTime?
+  status                     LegalNormVersionStatus    @default(DRAFT)
+  previousVersionId          String?
+  sourceId                   String?
+  contentHash                String?
+  notes                      String?
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  norm                       LegalNorm                 @relation(fields: [normId], references: [id], onDelete: Restrict)
+  previousVersion            LegalNormVersion?         @relation("LegalNormVersionHistory", fields: [previousVersionId], references: [id], onDelete: SetNull)
+  nextVersions               LegalNormVersion[]        @relation("LegalNormVersionHistory")
+  source                     LegalSource?              @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  provisions                 LegalProvision[]
+  applicabilityTargetRules   LegalApplicabilityRule[]   @relation("ApplicabilityTargetVersion")
+  transitionFromRules        LegalTransitionRule[]      @relation("TransitionFromVersion")
+  transitionToRules          LegalTransitionRule[]      @relation("TransitionToVersion")
+  decisionVersions           CaseLegalDecisionVersion[]
+  ragCitations               LegalRagCitation[]
+
+  @@unique([normId, versionKey])
+  @@index([normId, status, effectiveFrom, effectiveTo])
+  @@index([sourceId])
+}
+
+/// Estructura íntegra de una norma: Libro/Título/Capítulo/Sección/Artículo,
+/// fracción y transitorio. structurePath aporta unicidad estable incluso cuando
+/// una denominación contiene "bis" o una fracción no es numérica.
+model LegalProvision {
+  id            String              @id @default(cuid())
+  normVersionId String
+  parentId      String?
+  type          LegalProvisionType
+  designation   String
+  sortOrder     Int
+  structurePath String
+  heading       String?
+  fullText      String?
+  contentHash   String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  normVersion   LegalNormVersion    @relation(fields: [normVersionId], references: [id], onDelete: Restrict)
+  parent        LegalProvision?     @relation("LegalProvisionHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children      LegalProvision[]    @relation("LegalProvisionHierarchy")
+  embeddings    LegalEmbedding[]
+  documents     Document[]
+  caseKnowledge CaseKnowledge[]
+  ragCitations  LegalRagCitation[]
+
+  @@unique([normVersionId, structurePath])
+  @@index([normVersionId, type, designation])
+  @@index([parentId])
+}
+
+/// Embeddings separados del texto y de la versión, para poder reindexar sin
+/// alterar el contenido jurídico ni el RAG heredado de Document.
+model LegalEmbedding {
+  id            String                    @id @default(cuid())
+  provisionId   String
+  embedding     Unsupported("vector(1536)")?
+  model         String
+  contentHash   String
+  indexStatus   LegalEmbeddingIndexStatus @default(PENDING)
+  indexedAt     DateTime?
+  lastError     String?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  provision     LegalProvision            @relation(fields: [provisionId], references: [id], onDelete: Restrict)
+
+  @@unique([provisionId, model, contentHash])
+  @@index([indexStatus, updatedAt])
+}
+
+/// Regla determinista de aplicabilidad. Nunca depende de un LLM y siempre
+/// conserva la versión humana de la regla que produjo la decisión.
+model LegalApplicabilityRule {
+  id                    String                    @id @default(cuid())
+  ruleKey               String                    @unique
+  name                  String
+  matter                LegalMatter
+  territory             LegalTerritory
+  procedure             String?
+  phase                 String?
+  effectiveFrom         DateTime?
+  effectiveTo           DateTime?
+  priority              Int                       @default(0)
+  result                LegalApplicabilityResult
+  regime                LegalRegime?
+  targetNormId          String?
+  targetNormVersionId   String?
+  sourceId              String?
+  explanation           String
+  ruleVersion           String
+  active                Boolean                   @default(true)
+  retiredAt             DateTime?
+  retirementReason      String?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  targetNorm            LegalNorm?                @relation("ApplicabilityTargetNorm", fields: [targetNormId], references: [id], onDelete: SetNull)
+  targetNormVersion     LegalNormVersion?         @relation("ApplicabilityTargetVersion", fields: [targetNormVersionId], references: [id], onDelete: SetNull)
+  source                LegalSource?              @relation("ApplicabilityRuleSource", fields: [sourceId], references: [id], onDelete: SetNull)
+  decisions             CaseLegalRegimeDecision[] @relation("ApplicabilityRuleDecisions")
+
+  @@index([matter, territory, active, priority])
+  @@index([effectiveFrom, effectiveTo])
+  @@index([sourceId])
+}
+
+/// Regla explícita de transición, particularmente CPC Guanajuato -> CNPCF.
+/// No contiene fechas inventadas: ADMIN debe cargar sus fechas y fuente antes
+/// de que una regla quede activa.
+model LegalTransitionRule {
+  id                    String                    @id @default(cuid())
+  ruleKey               String                    @unique
+  name                  String
+  matter                LegalMatter
+  territory             LegalTerritory
+  procedure             String?
+  phase                 String?
+  effectiveFrom         DateTime?
+  effectiveTo           DateTime?
+  priority              Int                       @default(0)
+  result                LegalApplicabilityResult
+  regime                LegalRegime?
+  fromNormId            String?
+  toNormId              String?
+  fromNormVersionId     String?
+  toNormVersionId       String?
+  sourceId              String?
+  explanation           String
+  ruleVersion           String
+  active                Boolean                   @default(true)
+  retiredAt             DateTime?
+  retirementReason      String?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  fromNorm              LegalNorm?                @relation("TransitionFromNorm", fields: [fromNormId], references: [id], onDelete: SetNull)
+  toNorm                LegalNorm?                @relation("TransitionToNorm", fields: [toNormId], references: [id], onDelete: SetNull)
+  fromNormVersion       LegalNormVersion?         @relation("TransitionFromVersion", fields: [fromNormVersionId], references: [id], onDelete: SetNull)
+  toNormVersion         LegalNormVersion?         @relation("TransitionToVersion", fields: [toNormVersionId], references: [id], onDelete: SetNull)
+  source                LegalSource?              @relation("TransitionRuleSource", fields: [sourceId], references: [id], onDelete: SetNull)
+  decisions             CaseLegalRegimeDecision[] @relation("TransitionRuleDecisions")
+
+  @@index([matter, territory, active, priority])
+  @@index([effectiveFrom, effectiveTo])
+  @@index([sourceId])
+}
+
+/// Datos jurídicos normalizados del expediente. Se mantiene separado del campo
+/// LegalCase.context legado para no cambiar el comportamiento de rutas vigentes.
+model CaseLegalContext {
+  id              String                    @id @default(cuid())
+  caseId          String                    @unique
+  matter          LegalMatter
+  territory       LegalTerritory             @default(GUANAJUATO)
+  procedure       String?
+  municipality    String?
+  court           String?
+  startDate       DateTime?
+  filingDate      DateTime?
+  proceduralPhase String?
+  contextData     Json?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  case            LegalCase                 @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  decisions       CaseLegalRegimeDecision[]
+
+  @@index([matter, territory])
+}
+
+/// Resultado auditable de resolver el régimen aplicable para un caso. Las
+/// versiones permitidas se guardan en CaseLegalDecisionVersion, evitando que
+/// una búsqueda mezcle versiones de una misma norma.
+model CaseLegalRegimeDecision {
+  id                    String                    @id @default(cuid())
+  caseId                String
+  contextId             String?
+  applicabilityRuleId   String?
+  transitionRuleId      String?
+  result                LegalApplicabilityResult
+  regime                LegalRegime?
+  explanation           String
+  ruleVersion           String?
+  relevantDate          DateTime?
+  evaluatedAt           DateTime                  @default(now())
+  isHumanOverride       Boolean                   @default(false)
+  overrideReason        String?
+  actorUserId           String?
+  overrideActorUserId   String?
+  createdAt             DateTime                  @default(now())
+  case                  LegalCase                 @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  context               CaseLegalContext?         @relation(fields: [contextId], references: [id], onDelete: SetNull)
+  applicabilityRule     LegalApplicabilityRule?   @relation("ApplicabilityRuleDecisions", fields: [applicabilityRuleId], references: [id], onDelete: SetNull)
+  transitionRule        LegalTransitionRule?      @relation("TransitionRuleDecisions", fields: [transitionRuleId], references: [id], onDelete: SetNull)
+  actor                 User?                     @relation("LegalDecisionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  overrideActor         User?                     @relation("LegalDecisionOverrideActor", fields: [overrideActorUserId], references: [id], onDelete: SetNull)
+  permittedVersions     CaseLegalDecisionVersion[]
+  ragCitations          LegalRagCitation[]
+
+  @@index([caseId, evaluatedAt])
+  @@index([contextId])
+  @@index([result])
+}
+
+/// Lista explícita de versiones disponibles para una decisión de régimen.
+model CaseLegalDecisionVersion {
+  decisionId      String
+  normVersionId   String
+  reason          String?
+  decision        CaseLegalRegimeDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  normVersion     LegalNormVersion        @relation(fields: [normVersionId], references: [id], onDelete: Restrict)
+
+  @@id([decisionId, normVersionId])
+  @@index([normVersionId])
+}
+
+/// Trazabilidad de una cita que provenga del nuevo núcleo normativo. Puede
+/// convivir con el ChatLog/RAG actual sin cambiar sus respuestas existentes.
+model LegalRagCitation {
+  id            String                    @id @default(cuid())
+  caseId        String?
+  chatLogId     String?
+  decisionId    String?
+  sourceId      String?
+  normId        String?
+  normVersionId String?
+  provisionId   String?
+  queryText     String?
+  responseText  String?
+  queryHash     String?
+  responseHash  String?
+  createdAt     DateTime                  @default(now())
+  case          LegalCase?                @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  chatLog       ChatLog?                  @relation(fields: [chatLogId], references: [id], onDelete: SetNull)
+  decision      CaseLegalRegimeDecision?  @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+  source        LegalSource?              @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  norm          LegalNorm?                @relation(fields: [normId], references: [id], onDelete: SetNull)
+  normVersion   LegalNormVersion?         @relation(fields: [normVersionId], references: [id], onDelete: SetNull)
+  provision     LegalProvision?           @relation(fields: [provisionId], references: [id], onDelete: SetNull)
+
+  @@index([caseId, createdAt])
+  @@index([chatLogId])
+  @@index([normVersionId, provisionId])
+}
